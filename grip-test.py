@@ -1,4 +1,6 @@
-# Change to the port that you use (eg COM7)
+from time import sleep
+
+# Change to the port that you use
 rightPort = "/dev/tty.usbmodem1411"
 
 # Start the webgui service without starting the browser
@@ -24,9 +26,10 @@ i01.startMouth()
 #https://github.com/MyRobotLab/pyrobotlab/blob/ff6e2cef4d0642e47ee15e353ef934ac6701e713/home/hairygael/voice-cmu-bdl-5.2.jar
 
 i01.startRightHand(rightPort)
+
+# verbal commands
 ear = i01.ear
 
-# Set voice commands (attach them to functions)
 ear.addCommand("attach your right hand", "i01.rightHand", "attach")
 ear.addCommand("disconnect your right hand", "i01.rightHand", "detach")
 ear.addCommand("rest", i01.getName(), "rest")
@@ -43,34 +46,46 @@ ear.addNegations("no","wrong","nope","nah")
 
 ear.startListening()
 
-# Counter to allow for button pushing cooldown
 lastPressed = 0
 
-# Method to be called when pin values are refreshed
+triggeredPins = [0] * 200 # Globally store the pin values
+
 def publishPin(pins):
 	global lastPressed
-	lastPressed = max(lastPressed - 1, 0) # Gradually decrement cooldown (to zero)
-	
-	# Loop through every pin
+	lastPressed = max(lastPressed - 1, 0)
 	for pin in range(0, len(pins)):
 		pinval = pins[pin].value
-
-		# Pinval is the value of the pin (debug threshold through MRL)
-		# Also make sure that cooldown is finished
+		triggeredPins[pin] = pinval # Store pin value globally
 		if pinval > 600 and lastPressed <= 0:
 			i01.mouth.speak("You touched my button")
-			lastPressed = 2000 # Start cooldown
-			print str(pins[pin].address), ". pin pressed with value ", str(pinval)
+			lastPressed = 2000
+			handopen()
+		print str(pins[pin].address), ". pin pressed with value ", str(pinval)
 
 i01.rightHand.attach()
-# Trigger the publishPin method at the right time
 i01.rightHand.arduino.addListener("publishPinArray","python","publishPin")
-i01.rightHand.arduino.enablePin(54, 1000) # Pin 54 is A0 on Mega
+i01.rightHand.arduino.enablePin(54, 1000)
 
 def handopen():
   i01.moveHand("right",0,0,0,0,0)
   i01.mouth.speak("ok I'll open my hand")
 
 def handclose():
-  i01.moveHand("right",180,180,180,180,180)
-  i01.mouth.speak("ok I'm closing my hand")
+	i01.mouth.speak("ok I'm closing my hand")
+	servoSensors = [54, 55, 56, 57, 58] # Respective sensor pins for each finger
+	positions = [0, 0, 0, 0, 0]
+	for i in range(18):
+		# Loop through every finger
+		for j in range(len(positions)):
+			pin = servoSensors[j] # Get the pin number for this finger
+			pinval = triggeredPins[pin] # Get the value of the finger's sensor
+			if pinval < 600:
+				positions[j] = i * 10 # Update the servo position only if sensor is untriggered
+			# Else the finger will stay as-is
+
+		i01.moveHand("right", positions[0], positions[1], positions[2], positions[3], positions[4])
+		sleep(0.1) # Let the servo move
+
+	i01.moveHand("right",180,180,180,180,180)
+
+
